@@ -1,0 +1,12 @@
+export const CARDS_CACHE_FILE = 'truelayer-cards.json'
+export const ACCOUNTS_CACHE_FILE = 'truelayer-accounts.json'
+export const TRADING_CACHE_FILE = 'trading-transactions.json'
+export const USER_CONFIG_FILE = 'user-config.json'
+export const TRADING212_EXPORT_BASE = 'https://live.trading212.com/api/v0/history/exports'
+export const TRADING212_BALANCE_BASE = `https://live.trading212.com/api/v0/equity/account/cash`
+export const TRUELAYER_DATA_BASE = 'https://api.truelayer.com/data/v1'
+export const CLIENT_ID = process.env.CLIENT_ID
+export const CLIENT_SECRET = process.env.CLIENT_SECRET
+export const TOKEN_URL = 'https://auth.truelayer.com/connect/token'
+export const AUTH_URL = 'https://auth.truelayer.com/'
+export const REDIRECT_URI = 'http://localhost:3000/api/truelayer/callback'
