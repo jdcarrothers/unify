@@ -24,12 +24,15 @@ export default defineEventHandler(async () => {
   const tradingConnected = !!cfg.trading212Account
   const tlConnected = !!cfg.trueLayerAccount
 
+  const hasCards = cfg.trueLayerAccount?.Cards
+  const hasAccounts = cfg.trueLayerAccount?.Accounts
+
   const cardsApi = useTruelayerCards()
   const accountsApi = useTruelayerAccounts()
 
   const [cardsData, accountsData, tradingData] = await Promise.all([
-    tlConnected ? cardsApi.getCachedCards() : Promise.resolve([]),
-    tlConnected ? accountsApi.getCachedAccounts() : Promise.resolve([]),
+    hasCards ? cardsApi.getCachedCards() : Promise.resolve([]),
+    hasAccounts ? accountsApi.getCachedAccounts() : Promise.resolve([]),
     tradingConnected ? (await useTrading()).getCachedAccount() : Promise.resolve(null),
   ])
 
