@@ -3,7 +3,6 @@ import { useCache } from '~/composables/useCache'
 import { USER_CONFIG_FILE } from '~/const'
 import type { UserConfig } from '~/types/connections'
 
-import { useTruelayerCards } from '~/composables/useTruelayerCards'
 import { useTruelayerAccounts } from '~/composables/useTruelayerAccounts'
 import { useTrading } from '~/composables/useTrading'
 import type { CombinedFinancialData, FinancialTransaction } from '~/types'
@@ -22,24 +21,14 @@ export default defineEventHandler(async () => {
   const cfg: UserConfig = (cfgFile.data ?? {}) as UserConfig
 
   const tradingConnected = !!cfg.trading212Account
-  const tlConnected = !!cfg.trueLayerAccount
-
-  const hasCards = cfg.trueLayerAccount?.Cards
   const hasAccounts = cfg.trueLayerAccount?.Accounts
 
-  const cardsApi = useTruelayerCards()
   const accountsApi = useTruelayerAccounts()
 
-  const [cardsData, accountsData, tradingData] = await Promise.all([
-    hasCards ? cardsApi.getCachedCards() : Promise.resolve([]),
+  const [accountsData, tradingData] = await Promise.all([
     hasAccounts ? accountsApi.getCachedAccounts() : Promise.resolve([]),
     tradingConnected ? (await useTrading()).getCachedAccount() : Promise.resolve(null),
   ])
-
-  const cardsOwed = (cardsData as any[]).reduce(
-    (sum, c) => sum + Math.max(0, Number(c.balance ?? 0)),
-    0
-  )
 
   const accountsBalanceSum = (accountsData as any[]).reduce(
     (s, a) => s + Number(a.balance ?? 0),
@@ -48,19 +37,8 @@ export default defineEventHandler(async () => {
 
   const tradingBalance = Number(tradingData?.balance ?? 0)
 
-  const totalBalance = accountsBalanceSum + tradingBalance - cardsOwed
+  const totalBalance = accountsBalanceSum + tradingBalance
 
-  const cardTransactions: FinancialTransaction[] = sortByDate(
-    (cardsData as any[])
-      .flatMap((c) => c.transactions ?? [])
-      .map((tx: any) => ({
-        type: Number(tx.amount) < 0 ? 'WITHDRAW' : 'DEPOSIT',
-        amount: Number(tx.amount),
-        reference: String(tx.id ?? ''),
-        dateTime: String(tx.timestamp ?? new Date(0).toISOString()),
-        source: 'credit-card',
-      }))
-  )
 
   const accountTransactions: FinancialTransaction[] = sortByDate(
     (accountsData as any[])
@@ -85,27 +63,9 @@ export default defineEventHandler(async () => {
   )
 
   let allTransactions = sortByDate([
-    ...cardTransactions,
     ...accountTransactions,
     ...tradingTransactions,
   ])
-
-  const bankWithdrawKeys = new Set(
-    allTransactions
-      .filter((t) => t.source === 'bank-account' && t.type === 'WITHDRAW')
-      .map((t) => {
-        const dateKey = new Date(t.dateTime).toISOString().slice(0, 10)
-        const amountKey = Math.abs(Number(t.amount)).toFixed(2)
-        return `${dateKey}:${amountKey}`
-      })
-  )
-
-  allTransactions = allTransactions.filter((t) => {
-    if (t.source !== 'credit-card' || t.type !== 'WITHDRAW') return true
-    const dateKey = new Date(t.dateTime).toISOString().slice(0, 10)
-    const amountKey = Math.abs(Number(t.amount)).toFixed(2)
-    return !bankWithdrawKeys.has(`${dateKey}:${amountKey}`)
-  })
 
   const combinedData: CombinedFinancialData = {
     transactions: allTransactions,
