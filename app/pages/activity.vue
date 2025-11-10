@@ -3,169 +3,50 @@ import { h, ref, computed, watch } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { getGroupedRowModel } from '@tanstack/vue-table'
 import type { GroupingOptions } from '@tanstack/vue-table'
-import type { CombinedFinancialData, FinancialTransaction, Stat } from '~/types'
-import { useFinanceStream } from '~/composables/useFinanceStream'
+import { 
+  filterMirroredTransactions, 
+  useActivityStats, 
+  prepareTransactionRows,
+  transactionUtils,
+  type TransactionRow 
+} from '~/composables/useActivityStats'
+import { useFinancialDataWithStream } from '~/composables/useFinancialData'
+import SyncBanner from '~/components/connections/SyncBanner.vue'
 
-const { data, status, refresh } = await useFetch<CombinedFinancialData>('/api/transactions', { lazy: true })
-const { status: streamStatus, update: streamUpdate } = useFinanceStream()
+const { data, status, refresh, streamUpdate, isDemoMode } = useFinancialDataWithStream()
 
 watch(streamUpdate, (evt) => {
   if (evt?.source === 'trading212') refresh()
 })
 
-const isT212Syncing = computed(() => streamStatus.value?.source === 'trading212' && streamStatus.value.state === 'pending')
-const t212Error = computed(() => streamStatus.value?.state === 'error' ? streamStatus.value.error : null)
-
-const MIRROR_TOLERANCE = 1
-const MIRROR_WINDOW_MS = 3 * 86400000
-
-function isMirrored(bankTx: FinancialTransaction, t212Tx: FinancialTransaction) {
-  return (
-    bankTx.source === 'bank-account' &&
-    bankTx.amount < 0 &&
-    t212Tx.source === 'trading212' &&
-    t212Tx.amount > 0 &&
-    Math.abs(Math.abs(bankTx.amount) - Math.abs(t212Tx.amount)) < MIRROR_TOLERANCE &&
-    Math.abs(new Date(bankTx.dateTime).getTime() - new Date(t212Tx.dateTime).getTime()) <
-      MIRROR_WINDOW_MS
-  )
-}
-
 const filteredTransactions = computed(() => {
-  const txs = [...(data.value?.transactions || [])]
-  const toRemove = new Set<string>()
-
-  for (const bankTx of txs.filter((t) => t.source === 'bank-account' && t.amount < 0)) {
-    const match = txs.find((t) => !toRemove.has(t.reference) && isMirrored(bankTx, t))
-    if (match) {
-      toRemove.add(bankTx.reference)
-      toRemove.add(match.reference)
-    }
-  }
-
-  return txs.filter((t) => !toRemove.has(t.reference))
+  const transactions = data.value?.transactions || []
+  return filterMirroredTransactions(transactions)
 })
 
-const monthOffset = ref(0)
-const weekOffset = ref(0)
+const activityStats = useActivityStats(filteredTransactions)
 
-function shiftMonth(delta: number) {
-  const now = new Date()
-  const newOffset = monthOffset.value + delta
-  const target = new Date(now)
-  target.setMonth(now.getMonth() + newOffset)
-  if (target > now) return 
-  monthOffset.value = newOffset
-}
+const { 
+  stats, 
+  shiftMonth, 
+  shiftWeek, 
+  monthOffset, 
+  weekOffset 
+} = activityStats
 
-function shiftWeek(delta: number) {
-  const now = new Date()
-  const newOffset = weekOffset.value + delta
-  const target = new Date(now)
-  target.setDate(now.getDate() + newOffset * 7)
-  if (target > now) return 
-  weekOffset.value = newOffset
-}
-
-function getRange(mode: 'month' | 'week', offset: number) {
-  const now = new Date()
-  const start = new Date(now)
-  const end = new Date(now)
-
-  if (mode === 'month') {
-    start.setMonth(now.getMonth() + offset)
-    start.setDate(1)
-    start.setHours(0, 0, 0, 0)
-    end.setMonth(now.getMonth() + offset + 1)
-    end.setDate(0)
-    end.setHours(23, 59, 59, 999)
-  } else {
-    const currentDay = now.getDay()
-    const startOfWeek = new Date(now)
-    startOfWeek.setDate(now.getDate() - currentDay + offset * 7)
-    startOfWeek.setHours(0, 0, 0, 0)
-    const endOfWeek = new Date(startOfWeek)
-    endOfWeek.setDate(startOfWeek.getDate() + 6)
-    endOfWeek.setHours(23, 59, 59, 999)
-    start.setTime(startOfWeek.getTime())
-    end.setTime(endOfWeek.getTime())
-  }
-
-  return { start, end }
-}
-
-function formatRangeLabel(mode: 'month' | 'week', start: Date, end: Date) {
-  return mode === 'month'
-    ? start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-    : `${start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-}
-
-function calcSpending(range: { start: Date; end: Date }) {
-  let total = 0
-  for (const tx of filteredTransactions.value) {
-    if (tx.amount < 0 && tx.type !== 'DEPOSIT') {
-      const d = new Date(tx.dateTime)
-      if (d >= range.start && d <= range.end) total += Math.abs(tx.amount)
-    }
-  }
-  return total
-}
-
-const monthRange = computed(() => getRange('month', monthOffset.value))
-const weekRange = computed(() => getRange('week', weekOffset.value))
-
-const monthSpending = computed(() => calcSpending(monthRange.value))
-const weekSpending = computed(() => calcSpending(weekRange.value))
-
-const monthLabel = computed(() => formatRangeLabel('month', monthRange.value.start, monthRange.value.end))
-const weekLabel = computed(() => formatRangeLabel('week', weekRange.value.start, weekRange.value.end))
-
-const stats = computed((): Stat[] => [
-  {
-    key: 'month',
-    icon: 'i-lucide-calendar-range',
-    title: 'Monthly Spending',
-    value: monthSpending.value.toFixed(2),
-    variation: 0,
-    label: monthLabel.value,
-  },
-  {
-    key: 'week',
-    icon: 'i-lucide-calendar-days',
-    title: 'Weekly Spending',
-    value: weekSpending.value.toFixed(2),
-    variation: 0,
-    label: weekLabel.value,
-  },
-])
-
-
-type TxRow = FinancialTransaction & {
-  uid: string
-  dayKey: string
-  dayLabel: string
-}
-
-const fmtGBP = (n: number) => n.toLocaleString('en-GB', { style: 'currency', currency: 'GBP' })
-const typeColor = (t: string) =>
-  ({ DEPOSIT: 'success', WITHDRAW: 'error', DIVIDEND: 'primary', FEE: 'warning' } as Record<string, string>)[t] || 'neutral'
-
-const rows = computed<TxRow[]>(() => {
+const rows = computed<TransactionRow[]>(() => {
   if (!data.value?.transactions) return []
-  const out = data.value.transactions.map((t) => {
-    const d = new Date(t.dateTime)
-    const dayKey = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-')
-    const dayLabel = d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })
-    const uid = `${t.dateTime}|${t.type}|${t.amount}`
-    return { ...t, uid, dayKey, dayLabel }
-  })
-  return out.sort((a, b) => {
+  
+  const preparedRows = prepareTransactionRows(data.value.transactions)
+  return preparedRows.sort((a, b) => {
     if (a.dayKey !== b.dayKey) return a.dayKey < b.dayKey ? 1 : -1
     return new Date(a.dateTime).getTime() < new Date(b.dateTime).getTime() ? 1 : -1
   })
 })
 
-const columns: TableColumn<TxRow>[] = [
+const { formatGBP, getTypeColor } = transactionUtils
+
+const columns: TableColumn<TransactionRow>[] = [
   { id: 'title', header: 'Date' },
   { id: 'day', accessorKey: 'dayKey' },
   {
@@ -177,7 +58,7 @@ const columns: TableColumn<TxRow>[] = [
       return h(
         'div',
         { class: ['font-medium', isGroup ? 'text-right' : 'text-left', amount >= 0 ? 'text-success' : 'text-error'] },
-        `${amount >= 0 ? '+' : ''}${fmtGBP(Math.abs(amount))}`
+        `${amount >= 0 ? '+' : ''}${formatGBP(Math.abs(amount))}`
       )
     },
     aggregationFn: 'sum'
@@ -197,23 +78,31 @@ function selectFromRow(rowObj: any) {
   if (rowObj.getIsGrouped() && rowObj.groupingColumnId === 'day') {
     selectedGroup.value = { dayKey: rowObj.original.dayKey }
   } else {
-    const o = rowObj.original as TxRow
-    selectedGroup.value = { dayKey: o.dayKey }
+    const transaction = rowObj.original as TransactionRow
+    selectedGroup.value = { dayKey: transaction.dayKey }
   }
 }
 
 function isRowHighlighted(rowObj: any) {
-  const sel = selectedGroup.value
-  if (!sel) return false
-  if (rowObj.getIsGrouped && rowObj.getIsGrouped()) return rowObj.original.dayKey === sel.dayKey
-  const o = rowObj.original as TxRow
-  return o && o.dayKey === sel.dayKey
+  const selection = selectedGroup.value
+  if (!selection) return false
+  
+  if (rowObj.getIsGrouped && rowObj.getIsGrouped()) {
+    return rowObj.original.dayKey === selection.dayKey
+  }
+  
+  const transaction = rowObj.original as TransactionRow
+  return transaction && transaction.dayKey === selection.dayKey
 }
 
 function rowAttrs(rowObj: any) {
   const highlighted = isRowHighlighted(rowObj)
   return {
-    class: ['cursor-pointer transition-colors', 'hover:bg-primary/5', highlighted ? 'bg-primary/10 ring-1 ring-inset ring-primary/25' : ''].join(' '),
+    class: [
+      'cursor-pointer transition-colors',
+      'hover:bg-primary/5',
+      highlighted ? 'bg-primary/10 ring-1 ring-inset ring-primary/25' : ''
+    ].join(' '),
     onClick: () => selectFromRow(rowObj),
     'aria-selected': highlighted || undefined
   }
@@ -229,17 +118,16 @@ function rowAttrs(rowObj: any) {
         </template>
 
         <template #trailing>
-          <UBadge v-if="isT212Syncing" color="warning" variant="subtle">
-            Trading212 syncing…
-          </UBadge>
-          <UBadge v-else-if="t212Error" color="error" variant="subtle">
-            {{ t212Error }}
+          <UBadge v-if="isDemoMode" color="info" variant="subtle">
+            Demo Mode
           </UBadge>
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
+      <SyncBanner sync-only />
+      
       <UPageGrid class="lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-px items-center">
         <UPageCard
           v-for="stat in stats"
@@ -306,7 +194,7 @@ function rowAttrs(rowObj: any) {
                 </template>
                 <template v-else>
                   <UBadge
-                    :color="typeColor(row.original.type) as any"
+                    :color="getTypeColor(row.original.type) as any"
                     class="capitalize"
                     variant="subtle"
                   >

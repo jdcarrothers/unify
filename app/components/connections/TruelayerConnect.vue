@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useToast } from '#imports'
 import { useConnections } from '~/composables/useConnections'
+import { useDemoMode } from '~/composables/useDemoMode'
+import { useDemoConnectionData } from '~/composables/useDemoConnectionData'
 
 type TLStatus = {
   connected?: boolean
@@ -16,15 +18,29 @@ const emit = defineEmits<{
 }>()
 
 const { connectTrueLayer, initTrueLayer } = useConnections()
+const { isDemoMode } = useDemoMode()
+const demoConnectionData = useDemoConnectionData()
 const toast = useToast()
 
-const tl = computed(() => props.truelayer ?? {})
+const tl = computed(() => {
+  if (isDemoMode.value) {
+    return demoConnectionData.truelayer
+  }
+  return props.truelayer ?? {}
+})
+
 const isConnected = computed(() => !!tl.value?.connected)
 const hasAccounts = computed(() => Array.isArray(tl.value?.connectedAccounts) && tl.value.connectedAccounts.length > 0)
 const hasCards = computed(() => Array.isArray(tl.value?.connectedCards) && tl.value.connectedCards.length > 0)
 const hasData = computed(() => hasAccounts.value || hasCards.value)
 
 async function onConnect(close: () => void) {
+  if (isDemoMode.value) {
+    close()
+    emit('connected')
+    return
+  }
+
   try {
     await connectTrueLayer() 
     close()

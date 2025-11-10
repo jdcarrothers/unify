@@ -1,50 +1,29 @@
-// server/api/transactions.get.ts (or .post.ts if you prefer)
 import { useCache } from '~/composables/useCache'
-import { USER_CONFIG_FILE } from '~/const'
 import type { UserConfig } from '~/types/connections'
-
+import { USER_CONFIG_FILE } from '~/const'
 import { useTruelayerCards } from '~/composables/useTruelayerCards'
 import { useTruelayerAccounts } from '~/composables/useTruelayerAccounts'
 import { useTrading } from '~/composables/useTrading'
 import type { CombinedFinancialData, FinancialTransaction } from '~/types'
-
-function sortByDate<T extends { dateTime?: string; timestamp?: string }>(list: T[]): T[] {
-  return list.sort(
-    (a, b) =>
-      new Date(a.dateTime || a.timestamp || 0).getTime() -
-      new Date(b.dateTime || b.timestamp || 0).getTime()
-  )
-}
+import { sortByDate, sumBalances } from '~/utils/shared'
 
 export default defineEventHandler(async () => {
   const cfgCache = useCache<UserConfig>(USER_CONFIG_FILE)
-  const cfgFile = await cfgCache.read()
-  const cfg: UserConfig = (cfgFile.data ?? {}) as UserConfig
+  const { data } = await cfgCache.read()
+  const cfg = data ?? {}
 
   const tradingConnected = !!cfg.trading212Account
-  const tlConnected = !!cfg.trueLayerAccount
-
-  const hasCards = cfg.trueLayerAccount?.Cards
-  const hasAccounts = cfg.trueLayerAccount?.Accounts
-
-  const cardsApi = useTruelayerCards()
-  const accountsApi = useTruelayerAccounts()
+  const hasCards = (cfg.trueLayerAccount?.Cards?.length ?? 0) > 0
+  const hasAccounts = (cfg.trueLayerAccount?.Accounts?.length ?? 0) > 0
 
   const [cardsData, accountsData, tradingData] = await Promise.all([
-    hasCards ? cardsApi.getCachedCards() : Promise.resolve([]),
-    hasAccounts ? accountsApi.getCachedAccounts() : Promise.resolve([]),
+    hasCards ? useTruelayerCards().getCachedCards() : Promise.resolve([]),
+    hasAccounts ? useTruelayerAccounts().getCachedAccounts() : Promise.resolve([]),
     tradingConnected ? (await useTrading()).getCachedAccount() : Promise.resolve(null),
   ])
 
-  const cardsOwed = (cardsData as any[]).reduce(
-    (sum, c) => sum + Math.max(0, Number(c.balance ?? 0)),
-    0
-  )
-
-  const accountsBalanceSum = (accountsData as any[]).reduce(
-    (s, a) => s + Number(a.balance ?? 0),
-    0
-  )
+  const cardsOwed = sumBalances(cardsData as any[], (balance) => Math.max(0, balance))
+  const accountsBalanceSum = sumBalances(accountsData as any[])
 
   const tradingBalance = Number(tradingData?.balance ?? 0)
 

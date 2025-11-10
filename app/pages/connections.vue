@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import TradingConnect from '~/components/connections/TradingConnect.vue'
 import TruelayerConnect from '~/components/connections/TruelayerConnect.vue'
 import SyncBanner from '~/components/connections/SyncBanner.vue'
+import { useDemoMode } from '~/composables/useDemoMode'
 import { useConnections } from '~/composables/useConnections'
+import { useConnectionStatus, type ConnectionConfig } from '~/utils/shared'
+import { useDemoConnectionData } from '~/composables/useDemoConnectionData'
 
 const showT212Modal = ref(false)
 const showTLModal = ref(false)
 
 const { getStatus } = useConnections()
+const { isDemoMode, setDemoMode } = useDemoMode()
+const demoStatus = useDemoConnectionData()
 
 const status = ref<any>(null)
 const loading = ref(false)
@@ -16,13 +21,28 @@ const loading = ref(false)
 async function refreshStatus() {
   loading.value = true
   try {
-    status.value = await getStatus()
+    if (isDemoMode.value) {
+      console.log('Demo mode: Using mock connection status')
+      status.value = demoStatus
+    } else {
+      const apiStatus = await getStatus()
+      status.value = {
+        ...apiStatus,
+        demo: {
+          active: false
+        }
+      }
+    }
   } finally {
     loading.value = false
   }
 }
 
 onMounted(refreshStatus)
+
+watch(isDemoMode, () => {
+  refreshStatus()
+})
 
 function handleTradingConnected() {
   refreshStatus()
@@ -31,19 +51,78 @@ function handleTrueLayerConnected() {
   refreshStatus()
 }
 
-const t212Connected = computed(() => !!status.value?.trading212?.connected)
+function handleConnectionClick(connectionId: string) {
+  if (connectionId === 'trading212') {
+    showT212Modal.value = true
+  } else if (connectionId === 'truelayer') {
+    showTLModal.value = true
+  } else if (connectionId === 'demo') {
+    // Toggle demo mode
+    setDemoMode(!isDemoMode.value)
+    refreshStatus()
+  }
+}
 
-const tl = computed(() => status.value?.truelayer ?? {})
-const tlConnected = computed(() => !!tl.value?.connected)
-const tlHasAccounts = computed(() => Array.isArray(tl.value?.connectedAccounts) && tl.value.connectedAccounts.length > 0)
-const tlHasCards = computed(() => Array.isArray(tl.value?.connectedCards) && tl.value.connectedCards.length > 0)
-const tlHasData = computed(() => tlHasAccounts.value || tlHasCards.value)
+const connectionConfigs: ConnectionConfig[] = [
+  {
+    id: 'trading212',
+    title: 'Trading212',
+    icon: 'i-lucide-line-chart',
+    description: 'Connect your Trading212 account using your API credentials.',
+    statusPath: ['trading212', 'connected'],
+    buttonLabel: {
+      disconnected: 'Connect',
+      connected: 'Update credentials'
+    }
+  },
+  {
+    id: 'truelayer',
+    title: 'TrueLayer',
+    icon: 'i-lucide-plug',
+    description: 'Connect your debit & credit accounts via TrueLayer to import transactions.',
+    statusPath: ['truelayer', 'connected'],
+    hasDataPath: ['truelayer', 'connectedAccounts'], // Also check connectedCards in logic
+    buttonLabel: {
+      disconnected: 'Connect',
+      connected: 'Initialise',
+      withData: 'View accounts & cards'
+    }
+  },
+  {
+    id: 'demo',
+    title: 'Demo Mode',
+    icon: 'i-heroicons-beaker',
+    description: 'Switch between live financial data and mock demo data for testing.',
+    statusPath: ['demo', 'active'], // We'll add this to mock status
+    buttonLabel: {
+      disconnected: 'Start Demo',
+      connected: 'Stop Demo'
+    }
+  }
+]
 
-const tlPrimaryLabel = computed(() => {
-  if (!tlConnected.value) return 'Connect'
-  if (!tlHasData.value) return 'Initialise'
-  return 'View accounts & cards'
+const connectionStatuses = computed(() => {
+  const statuses = useConnectionStatus(status.value, connectionConfigs)
+  
+  const truelayerStatus = statuses.find(s => s.id === 'truelayer')
+  if (truelayerStatus && status.value?.truelayer) {
+    const hasAccounts = Array.isArray(status.value.truelayer.connectedAccounts) && 
+                       status.value.truelayer.connectedAccounts.length > 0
+    const hasCards = Array.isArray(status.value.truelayer.connectedCards) && 
+                    status.value.truelayer.connectedCards.length > 0
+    truelayerStatus.hasData = hasAccounts || hasCards
+    
+    if (truelayerStatus.isConnected) {
+      truelayerStatus.buttonLabel = truelayerStatus.hasData ? 
+        'View accounts & cards' : 'Initialise'
+    }
+  }
+  
+  return statuses
 })
+
+const t212Status = computed(() => connectionStatuses.value.find(s => s.id === 'trading212'))
+const tlStatus = computed(() => connectionStatuses.value.find(s => s.id === 'truelayer'))
 
 </script>
 
@@ -61,38 +140,25 @@ const tlPrimaryLabel = computed(() => {
       <SyncBanner />
 
       <UPageGrid class="lg:grid-cols-3 gap-4 sm:gap-6">
-        <!-- Trading212 -->
-        <UPageCard title="Trading212" icon="i-lucide-line-chart" variant="subtle">
+        <UPageCard 
+          v-for="connection in connectionStatuses" 
+          :key="connection.id"
+          :title="connection.title" 
+          :icon="connection.icon" 
+          variant="subtle"
+        >
           <p class="text-sm text-muted mb-4">
-            Connect your Trading212 account using your API credentials.
+            {{ connection.description }}
           </p>
-
-          
-
-          <UButton
-            icon="i-lucide-key-round"
-            color="primary"
-            :label="t212Connected ? 'Update credentials' : 'Connect'"
-            @click="showT212Modal = true"
-          />
-        </UPageCard>
-
-        <!-- TrueLayer -->
-        <UPageCard title="TrueLayer" icon="i-lucide-plug" variant="subtle">
-          <p class="text-sm text-muted mb-4">
-            Connect your debit & credit accounts via TrueLayer to import transactions.
-          </p>
-
 
           <UButton
             :loading="loading"
-            :label="tlPrimaryLabel"
+            :label="connection.buttonLabel"
             color="primary"
-            icon="i-lucide-key-round"
-            @click="showTLModal = true"
+            :icon="connection.id === 'demo' ? 'i-heroicons-beaker' : 'i-lucide-key-round'"
+            @click="handleConnectionClick(connection.id)"
           />
         </UPageCard>
-
       </UPageGrid>
 
       <TradingConnect

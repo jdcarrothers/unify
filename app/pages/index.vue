@@ -1,15 +1,11 @@
 <script setup lang="ts">
 import type { Period, Range } from '~/types'
 import { subYears } from 'date-fns'
-import type { CombinedFinancialData, FinancialTransaction } from '~/types'
-import { useFinanceStream } from '~/composables/useFinanceStream'
+import type {  FinancialTransaction } from '~/types'
+import { useFinancialDataWithStream } from '~/composables/useFinancialData'
+import SyncBanner from '~/components/connections/SyncBanner.vue'
 
-const { data: financeData, status, refresh } = await useFetch<CombinedFinancialData>(
-  '/api/transactions',
-  { lazy: true }
-)
-
-const { status: streamStatus, update: streamUpdate } = useFinanceStream()
+const { data: financeData, status, refresh, streamUpdate, isDemoMode } = useFinancialDataWithStream()
 
 watch(streamUpdate, (evt) => {
   if (evt?.source === 'trading212') {
@@ -17,9 +13,6 @@ watch(streamUpdate, (evt) => {
     refresh()
   }
 })
-  
-const isT212Syncing = computed(() => streamStatus.value?.source === 'trading212' && streamStatus.value.state === 'pending')
-const t212Error = computed(() => streamStatus.value?.state === 'error' ? streamStatus.value.error : null)
 
 const earliestTxDate = computed(() => {
   const all = financeData.value?.transactions ?? []
@@ -51,11 +44,8 @@ const period = ref<Period>('weekly')
         </template>
 
         <template #trailing>
-          <UBadge v-if="isT212Syncing" color="warning" variant="subtle">
-            Trading212 syncing...
-          </UBadge>
-          <UBadge v-else-if="t212Error" color="error" variant="subtle">
-            {{ t212Error }}
+          <UBadge v-if="isDemoMode" color="info" variant="subtle">
+            Demo Mode
           </UBadge>
         </template>
       </UDashboardNavbar>
@@ -69,8 +59,11 @@ const period = ref<Period>('weekly')
     </template>
 
     <template #body>
-      <HomeStats :period="period" :range="range" :data="financeData!" />
-      <HomeChart :period="period" :range="range" :data="financeData!" />
+      <SyncBanner sync-only />
+      <div class="space-y-6">
+        <HomeStats :period="period" :range="range" :data="financeData!" />
+        <HomeChart :period="period" :range="range" :data="financeData!" />
+      </div>
     </template>
   </UDashboardPanel>
 </template>

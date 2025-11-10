@@ -1,98 +1,142 @@
 import type { CombinedFinancialData, FinancialTransaction } from '~/types'
 
-function daysAgo(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString()
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c == 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
 }
 
-function randomBetween(min: number, max: number): number {
-  return Math.round((Math.random() * (max - min) + min) * 100) / 100
+function randomBetween(min: number, max: number) {
+  return Math.random() * (max - min) + min
 }
 
-// produce a smooth realistic series with dips/spikes
-function generateDemoTransactions(): FinancialTransaction[] {
-  const txs: FinancialTransaction[] = []
-  const totalDays = 120 // ~4 months
-  let runningBalance = 1000
-
-  for (let i = totalDays; i >= 0; i--) {
-    const day = daysAgo(i)
-
-    // simulate regular salary deposits (every 14 days)
-    if (i % 14 === 0) {
-      const deposit = randomBetween(1800, 2400)
-      runningBalance += deposit
-      txs.push({
-        type: 'DEPOSIT',
-        amount: deposit,
-        reference: `PAY_${i}`,
-        dateTime: day,
-        source: 'bank-account',
-      })
-    }
-
-    // small daily card spending (0–2 per day)
-    const spendCount = Math.floor(Math.random() * 3)
-    for (let j = 0; j < spendCount; j++) {
-      const spend = randomBetween(10, 120)
-      runningBalance -= spend
-      txs.push({
-        type: 'WITHDRAW',
-        amount: -spend,
-        reference: `CARD_SPEND_${i}_${j}`,
-        dateTime: day,
-        source: 'credit-card',
-      })
-    }
-
-    // occasional trading gains/losses
-    if (Math.random() < 0.15) {
-      const profit = randomBetween(-80, 150)
-      runningBalance += profit
-      txs.push({
-        type: profit >= 0 ? 'DEPOSIT' : 'WITHDRAW',
-        amount: profit,
-        reference: `TRADE_${i}`,
-        dateTime: day,
-        source: 'trading212',
-      })
-    }
-
-    // small weekly cashback
-    if (i % 7 === 0 && Math.random() < 0.4) {
-      const cashback = randomBetween(1, 10)
-      runningBalance += cashback
-      txs.push({
-        type: 'DEPOSIT',
-        amount: cashback,
-        reference: `CASHBACK_${i}`,
-        dateTime: day,
-        source: 'credit-card',
-      })
-    }
-  }
-
-  // normalise amounts
-  return txs
-    .sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime())
-    .map((t) => ({
-      ...t,
-      amount: Number(t.amount.toFixed(2)),
-    }))
+function randomChoice<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]
 }
 
 export default defineEventHandler(async () => {
-  const transactions = generateDemoTransactions()
+  const now = Date.now()
+  const day = 1000 * 60 * 60 * 24
+  const transactions: FinancialTransaction[] = []
+  
+  const incomeTypes = [
+    'Salary - Tech Corp Ltd',
+    'Freelance Payment - Client ABC',
+    'Dividend Payment - VWRL',
+    'Interest - Savings Account',
+    'Tax Refund - HMRC',
+    'Cashback Rewards',
+    'Investment Sale - Profit'
+  ]
+  
+  const expenseTypes = [
+    'Rent Payment',
+    'Grocery Shopping - Tesco',
+    'Grocery Shopping - Sainsburys',
+    'Fuel - Shell Station',
+    'Fuel - BP Station', 
+    'Coffee - Starbucks',
+    'Lunch - Pret A Manger',
+    'Netflix Subscription',
+    'Spotify Premium',
+    'Amazon Prime',
+    'Phone Bill - EE',
+    'Internet - BT',
+    'Utility Bills - British Gas',
+    'Council Tax',
+    'Insurance Premium',
+    'Gym Membership',
+    'Public Transport',
+    'Uber Ride',
+    'Restaurant - Pizza Express',
+    'Cinema Tickets',
+    'Clothing - H&M',
+    'Books - Waterstones',
+    'Pharmacy - Boots'
+  ]
+  
+  const tradingTypes = [
+    'Investment - Buy VWRL',
+    'Investment - Buy TSLA', 
+    'Investment - Buy AAPL',
+    'Investment - Sell MSFT',
+    'Dividend - Apple Inc',
+    'Dividend - Microsoft',
+    'Trading Fee',
+    'Currency Exchange'
+  ]
 
-  // derive total balance by summing
-  const totalBalance = transactions.reduce((sum, tx) => sum + tx.amount, 0) + 3100 // starting offset
-
+  let runningBalance = 42000
+  
+  for (let daysAgo = 120; daysAgo >= 0; daysAgo--) {
+    const date = new Date(now - (daysAgo * day))
+    const numTransactions = Math.floor(randomBetween(0, 4))
+    
+    for (let i = 0; i < numTransactions; i++) {
+      const isIncome = Math.random() > 0.7
+      const source = randomChoice(['bank-account', 'credit-card', 'trading212'])
+      
+      let type: 'DEPOSIT' | 'WITHDRAW'
+      let amount: number
+      let reference: string
+      
+      if (isIncome || source === 'credit-card' && Math.random() > 0.9) {
+        type = 'DEPOSIT'
+        if (source === 'bank-account') {
+          amount = Math.floor(randomBetween(500, 3000))
+          reference = randomChoice(incomeTypes)
+        } else if (source === 'trading212') {
+          amount = Math.floor(randomBetween(10, 200) * 100) / 100
+          reference = randomChoice(tradingTypes.filter(t => t.includes('Dividend') || t.includes('Sell')))
+        } else {
+          amount = Math.floor(randomBetween(5, 50) * 100) / 100
+          reference = randomChoice(incomeTypes.filter(t => t.includes('Cashback')))
+        }
+      } else {
+        type = 'WITHDRAW'
+        if (source === 'bank-account') {
+          amount = -Math.floor(randomBetween(20, 800))
+          reference = randomChoice(expenseTypes.filter(t => 
+            t.includes('Rent') || t.includes('Utility') || t.includes('Council') || 
+            t.includes('Insurance') || t.includes('Phone') || t.includes('Internet')
+          ))
+        } else if (source === 'trading212') {
+          amount = -Math.floor(randomBetween(100, 1000))
+          reference = randomChoice(tradingTypes.filter(t => t.includes('Buy') || t.includes('Fee')))
+        } else {
+          amount = -Math.floor(randomBetween(5, 200) * 100) / 100
+          reference = randomChoice(expenseTypes.filter(t => 
+            !t.includes('Rent') && !t.includes('Utility') && !t.includes('Council') &&
+            !t.includes('Insurance') && !t.includes('Phone') && !t.includes('Internet')
+          ))
+        }
+      }
+      
+      runningBalance += amount
+      
+      const randomHour = Math.floor(randomBetween(8, 22))
+      const randomMinute = Math.floor(randomBetween(0, 59))
+      date.setHours(randomHour, randomMinute, 0, 0)
+      
+      transactions.push({
+        type,
+        amount,
+        reference: `${reference}_${generateUUID()}`,
+        dateTime: date.toISOString(),
+        source
+      })
+    }
+  }
+  
+  const totalBalance = 25432.50 + 15678.90 - 1234.56
+  
   const combinedData: CombinedFinancialData = {
-    transactions,
-    totalBalance,
+    transactions: transactions.sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()),
+    totalBalance
   }
 
-  await new Promise((r) => setTimeout(r, 400))
+  await new Promise(resolve => setTimeout(resolve, 200))
   return combinedData
 })

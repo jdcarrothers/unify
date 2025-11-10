@@ -2,6 +2,7 @@ export const CARDS_CACHE_FILE = 'truelayer-cards.json'
 export const ACCOUNTS_CACHE_FILE = 'truelayer-accounts.json'
 export const TRADING_CACHE_FILE = 'trading-transactions.json'
 export const USER_CONFIG_FILE = 'user-config.json'
+export const DEMO_MODE_FILE = 'demo-mode.json'
 export const TRADING212_EXPORT_BASE = 'https://live.trading212.com/api/v0/history/exports'
 export const TRADING212_BALANCE_BASE = `https://live.trading212.com/api/v0/equity/account/cash`
 export const TRUELAYER_DATA_BASE = 'https://api.truelayer.com/data/v1'

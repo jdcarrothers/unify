@@ -3,11 +3,12 @@ import { useCache } from '~/composables/useCache'
 import { useTruelayerApi } from '~/composables/useTruelayerApi'
 import type { UserConfig } from '~/types/connections'
 import { USER_CONFIG_FILE } from '~/const'
+import { enrichWithBalances } from '~/utils/shared'
 
 export default defineEventHandler(async () => {
   const cache = useCache<UserConfig>(USER_CONFIG_FILE)
-  const current = await cache.read()
-  const config = current.data ?? {}
+  const { data } = await cache.read()
+  const config = data ?? {}
 
   if (!config.trueLayerAccount) {
     return { error: 'No TrueLayer account linked.' }
@@ -21,18 +22,16 @@ export default defineEventHandler(async () => {
       api.listCards(),
     ])
 
-    const accountsWithBalances = await Promise.all(
-      accounts.map(async (acc) => {
-        const bal = await api.getAccountBalance(acc.account_id)
-        return { ...acc, balance: bal ?? undefined }
-      })
+    const accountsWithBalances = await enrichWithBalances(
+      accounts,
+      (id) => api.getAccountBalance(id),
+      (acc) => acc.account_id
     )
 
-    const cardsWithBalances = await Promise.all(
-      cards.map(async (card) => {
-        const bal = await api.getCardBalance(card.account_id)
-        return { ...card, balance: bal ?? undefined }
-      })
+    const cardsWithBalances = await enrichWithBalances(
+      cards,
+      (id) => api.getCardBalance(id),
+      (card) => card.account_id
     )
 
     const updated: UserConfig = {

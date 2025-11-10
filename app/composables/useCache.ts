@@ -1,4 +1,3 @@
-// app/composables/useCache.ts
 import type { UserConfig } from '~/types/connections'
 import { USER_CONFIG_FILE } from '~/const'
 
@@ -8,7 +7,23 @@ export interface CacheFile<T> {
 }
 
 const STALE_AFTER_HOURS = 1
-const storage = useStorage('data')
+
+function getStorage() {
+  if (import.meta.server) {
+    return useStorage('data')
+  }
+  return {
+    async getItem(key: string) {
+      if (typeof window === 'undefined') return null
+      const item = localStorage.getItem(`nuxt:data:${key}`)
+      return item ? JSON.parse(item) : null
+    },
+    async setItem(key: string, value: any) {
+      if (typeof window === 'undefined') return
+      localStorage.setItem(`nuxt:data:${key}`, JSON.stringify(value))
+    }
+  }
+}
 
 function hoursSince(iso?: string | null): number {
   if (!iso) return Number.POSITIVE_INFINITY
@@ -16,6 +31,7 @@ function hoursSince(iso?: string | null): number {
 }
 
 async function readUserLastSyncedAt(): Promise<string | null> {
+  const storage = getStorage()
   const raw = (await storage.getItem(USER_CONFIG_FILE)) as unknown
 
   if (!raw || typeof raw !== 'object') return null
@@ -30,6 +46,7 @@ async function readUserLastSyncedAt(): Promise<string | null> {
 
 export function useCache<T = any>(fileName: string) {
   async function read(): Promise<CacheFile<T>> {
+    const storage = getStorage()
     return (
       ((await storage.getItem(fileName)) as CacheFile<T> | null) ?? {
         lastUpdated: null,
@@ -39,6 +56,7 @@ export function useCache<T = any>(fileName: string) {
   }
 
   async function write(data: T) {
+    const storage = getStorage()
     const cache: CacheFile<T> = {
       lastUpdated: new Date().toISOString(),
       data,

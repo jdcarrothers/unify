@@ -1,17 +1,15 @@
 import { useCache } from '~/composables/useCache'
 import { broadcast } from '~~/server/api/utils/finance-stream'
 import type { FinanceStreamEvent } from '~/types/finance-stream'
-import type { T212Transaction, CachedTransactions } from '~/types/trading'
+import type {  CachedTransactions } from '~/types/trading'
 import { TRADING_CACHE_FILE } from '~/const'
 import { useTradingApi } from './useTradingApi'
 import { acquireLock, releaseLock } from '~~/server/api/utils/utils'
+import { mergeTransactions, sortByDate } from '~/utils/shared'
 
 export async function useTrading() {
   const { createExportJob, getDownloadUrlForReport, downloadCsvText, parseCsvToTransactions, getBalance } = useTradingApi()
   const tradingCache = useCache<CachedTransactions>(TRADING_CACHE_FILE)
-  function sortByDate<T extends { dateTime?: string; timestamp?: string }>(list: T[]): T[] {
-    return list.sort((a, b) => new Date(a.dateTime || a.timestamp || 0).getTime() - new Date(b.dateTime || b.timestamp || 0).getTime())
-  } 
   async function getCachedAccount() {
     const cached = await tradingCache.read()
     const staleTrading = await tradingCache.isStale()
@@ -43,11 +41,11 @@ export async function useTrading() {
             const total = await getBalance()
 
             const existing = cached.data?.transactions ?? []
-            const mergedMap = new Map<string, T212Transaction>()
-            for (const tx of existing) mergedMap.set(tx.reference, tx)
-            for (const tx of newTxs) mergedMap.set(tx.reference, tx)
-            const mergedTransactions = Array.from(mergedMap.values()).sort(
-              (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+            const mergedTransactions = mergeTransactions(
+              existing,
+              newTxs,
+              (tx) => tx.reference,
+              (tx) => tx.dateTime 
             )
 
             const payload: CachedTransactions = {
@@ -58,6 +56,7 @@ export async function useTrading() {
             }
 
             await tradingCache.write(payload)
+            broadcast({ type: 'status', payload: { source: 'trading212', state: 'ready' } } as FinanceStreamEvent)
             broadcast({ type: 'update', payload: { source: 'trading212', data: payload } } as FinanceStreamEvent)
           } catch (err: any) {
             console.error('Error refreshing Trading212 cache:', err)
@@ -72,5 +71,8 @@ export async function useTrading() {
     return cached.data
   }
 
-  return { getCachedAccount, sortByDate }
+  return { 
+    getCachedAccount,
+    sortByDate 
+  }
 }

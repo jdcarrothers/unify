@@ -11,9 +11,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const cache = useCache<UserConfig>(USER_CONFIG_FILE)
-  const current = await cache.read()
-
-  const existingData = current.data ?? {}
+  const { data } = await cache.read()
+  const existingData = data ?? {}
 
   const trading212Account: Trading212Account = {
     key: body.key,
