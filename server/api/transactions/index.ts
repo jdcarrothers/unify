@@ -38,21 +38,46 @@ export default defineEventHandler(async () => {
         reference: String(tx.id ?? ''),
         dateTime: String(tx.timestamp ?? new Date(0).toISOString()),
         source: 'credit-card',
+        category: String('uncategorized'),
+        description: tx.description || '',
       }))
   )
 
-  const accountTransactions: FinancialTransaction[] = sortByDate(
-    (accountsData as any[])
-      .flatMap((a) => a.transactions ?? [])
-      .map((tx: any) => ({
-        type: Number(tx.amount) > 0 ? 'DEPOSIT' : 'WITHDRAW',
-        amount: Number(tx.amount),
+const accountTransactions: FinancialTransaction[] = sortByDate(
+  (accountsData as any[])
+    .flatMap((a) => a.transactions ?? [])
+    .map((tx: any) => {
+      const amount = Number(tx.amount)
+      const type = amount > 0 ? 'DEPOSIT' : 'WITHDRAW'
+      const desc = (tx.description || '').toLowerCase()
+      
+      let category = tx.transaction_type || tx.transaction_category || 'uncategorized'
+      
+      if (type === 'DEPOSIT' && amount > 0 && amount <= 50) {
+        const excludeKeywords = ['payroll', 'salary', 'trading 212', 'vinted', 'mangopay', 'allowance']
+        const hasExcludeKeyword = excludeKeywords.some(kw => desc.includes(kw))
+        
+        if (!hasExcludeKeyword) {
+          const reimbursementKeywords = ['fuel', 'petrol', 'mot', 'wine', 'money']
+          const hasReimbursementKeyword = reimbursementKeywords.some(kw => desc.includes(kw))
+          
+          if (hasReimbursementKeyword || amount < 30) {
+            category = 'reimbursement'
+          }
+        }
+      }
+      
+      return {
+        type,
+        amount,
         reference: String(tx.id ?? ''),
         dateTime: new Date(tx.timestamp).toISOString(),
         source: 'bank-account',
-      }))
-  )
-
+        category,
+        description: tx.description || '',
+      }
+    })
+)
   const tradingTransactions: FinancialTransaction[] = sortByDate(
     (tradingData?.transactions ?? []).map((tx: any) => ({
       type: tx.type,
@@ -60,6 +85,8 @@ export default defineEventHandler(async () => {
       reference: String(tx.reference ?? ''),
       dateTime: String(tx.dateTime ?? new Date(0).toISOString()),
       source: 'trading212',
+      category: String('uncategorized'),
+      description: tx.description || '',
     }))
   )
 
