@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import type { Period, Range, Stat } from '~/types'
-import type { CombinedFinancialData, FinancialTransaction } from '~/types'
-
-const txList = computed<FinancialTransaction[]>(() => props.data?.transactions ?? [])
-const totalBalance = computed(() => props.data?.totalBalance ?? 0)
+import type { CombinedFinancialData } from '~/types'
+import { 
+  filterMirroredTransactions,
+  calculateIncome,
+  calculateSpending
+} from '~/composables/useActivityStats'
 
 const props = defineProps<{
   period: Period
   range: Range
   data: CombinedFinancialData
 }>()
+
+const filteredTxs = computed(() => {
+  const transactions = props.data?.transactions || []
+  return filterMirroredTransactions(transactions)
+})
+
+const totalBalance = computed(() => props.data?.totalBalance ?? 0)
 
 function formatCurrency(value: number): string {
   return value.toLocaleString('en-GB', {
@@ -19,86 +28,21 @@ function formatCurrency(value: number): string {
   })
 }
 
-function inRange(date: Date, range: Range) {
-  return date >= range.start && date <= range.end
+function inRange(date: Date) {
+  return date >= props.range.start && date <= props.range.end
 }
 
-const MIRROR_TOLERANCE = 1 
-const MIRROR_WINDOW_MS = 3 * 86400000 
-
-
-function isMirrored(a: FinancialTransaction, b: FinancialTransaction) {
-  const sameDay = Math.abs(
-    new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
-  ) < MIRROR_WINDOW_MS
-
-  const amountsClose =
-    Math.abs(Math.abs(a.amount) - Math.abs(b.amount)) < MIRROR_TOLERANCE
-
-  const isBankToTrading =
-    a.source === 'bank-account' && b.source === 'trading212' && sameDay && amountsClose
-
-  const isTradingToBank =
-    a.source === 'trading212' && b.source === 'bank-account' && sameDay && amountsClose
-
-  return (
-    (isBankToTrading && a.amount < 0 && b.amount > 0) ||
-    (isTradingToBank && a.amount > 0 && b.amount < 0)
-  )
-}
-
-
-const filteredTxs = computed(() => {
-  const txs = [...txList.value]
-  const toRemove = new Set<string>()
-
-  for (const a of txs) {
-    if (toRemove.has(a.reference)) continue
-
-    const match = txs.find(
-      (b) => !toRemove.has(b.reference) && a.reference !== b.reference && isMirrored(a, b)
-    )
-
-    if (match) {
-      toRemove.add(a.reference)
-      toRemove.add(match.reference)
-    }
-  }
-
-  return txs.filter((t) => !toRemove.has(t.reference))
-})
-
-
-function sumTxs(filter: (tx: FinancialTransaction) => boolean) {
-  return filteredTxs.value.reduce(
-    (sum, tx) => (filter(tx) ? sum + Number(tx.amount) : sum),
-    0
-  )
-}
-
-const currentDeposits = computed(() =>
-  sumTxs((tx) => {
-    const d = new Date(tx.dateTime)
-    return inRange(d, props.range) && tx.amount > 0 
-  })
-)
-
-const currentWithdrawals = computed(() =>
-  sumTxs((tx) => {
-    const d = new Date(tx.dateTime)
-    return inRange(d, props.range) && tx.amount < 0
-  })
+const currentSpending = computed(() => 
+  calculateSpending(filteredTxs.value, props.range)
 )
 
 const currentInterest = computed(() =>
-  sumTxs((tx) => {
-    const d = new Date(tx.dateTime)
-    return (
-      inRange(d, props.range) &&
-      tx.type == 'INTEREST/CASHBACK'
-      
-    )
-  })
+  filteredTxs.value
+    .filter(tx => {
+      const d = new Date(tx.dateTime)
+      return inRange(d) && tx.type === 'INTEREST/CASHBACK'
+    })
+    .reduce((sum, tx) => sum + tx.amount, 0)
 )
 
 const stats = computed<Stat[]>(() => [
@@ -109,15 +53,9 @@ const stats = computed<Stat[]>(() => [
     variation: 0,
   },
   {
-    title: 'Incoming',
-    icon: 'i-lucide-arrow-down-circle',
-    value: formatCurrency(currentDeposits.value),
-    variation: 0,
-  },
-  {
     title: 'Spent',
     icon: 'i-lucide-arrow-up-circle',
-    value: formatCurrency(Math.abs(currentWithdrawals.value)),
+    value: formatCurrency(currentSpending.value),
     variation: 0,
   },
   {
@@ -127,11 +65,10 @@ const stats = computed<Stat[]>(() => [
     variation: 0,
   },
 ])
-
 </script>
 
 <template>
-  <UPageGrid class="lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-px">
+  <UPageGrid class="lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-px">
     <UPageCard
       v-for="(stat, index) in stats"
       :key="index"

@@ -13,13 +13,38 @@ const links = [[{
     open.value = false
   }
 },{
-  label: 'Activity',
+  label: 'Transactions',
   icon: 'i-lucide-dollar-sign',
-  to: '/activity',
+  to: '/transactions',
   onSelect: () => {
     open.value = false
   }
-}, {
+}, 
+{
+  label: 'Income',
+  icon: 'i-lucide-arrow-down-circle',
+  to: '/income',
+  onSelect: () => {
+    open.value = false
+  }
+}, 
+{
+  label: 'Categories',
+  icon: 'i-lucide-pie-chart',
+  to: '/categories',
+  onSelect: () => {
+    open.value = false
+  }
+},
+{
+  label: 'Rules',
+  icon: 'i-lucide-settings',
+  to: '/rules',
+  onSelect: () => {
+    open.value = false
+  }
+},
+{
   label: 'Connections',
   icon: 'i-lucide-link-2',
   to: '/connections',
