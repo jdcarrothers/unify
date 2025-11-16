@@ -9,6 +9,7 @@ export interface T212Transaction {
   amount: number
   reference: string
   dateTime: string
+  description?: string
 }
 
 export interface CachedTransactions {

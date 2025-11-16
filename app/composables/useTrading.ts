@@ -13,7 +13,6 @@ export async function useTrading() {
   async function getCachedAccount() {
     const cached = await tradingCache.read()
     const staleTrading = await tradingCache.isStale()
-    console.log('Trading212 cache stale:', staleTrading)
 
     if (staleTrading) {
       const LOCK_KEY = 'locks/trading212-export'
@@ -24,10 +23,15 @@ export async function useTrading() {
 
         ;(async () => {
           try {
+           const now = new Date()
+            const oneWeekMs = 7 * 24 * 60 * 60 * 1000
+
             const timeFromISO = cached.data?.lastUpdated
-              ? cached.data.lastUpdated
+              ? new Date(new Date(cached.data.lastUpdated).getTime() - oneWeekMs).toISOString()
               : new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString()
-            const timeToISO = new Date().toISOString()
+
+            const timeToISO = now.toISOString()
+
 
             const reportId = await createExportJob(timeFromISO, timeToISO)
 

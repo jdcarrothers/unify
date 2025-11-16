@@ -43,9 +43,23 @@ export function filterMirroredTransactions(transactions: FinancialTransaction[])
     }
   }
 
+  for (const t212Tx of txs.filter(t => t.source === 'trading212' && t.amount < 0 && t.type === 'WITHDRAW')) {
+    const bankMatch = txs.find(t =>
+      !toRemove.has(t.reference) &&
+      t.source === 'bank-account' &&
+      t.amount > 0 &&
+      t.type === 'DEPOSIT' &&
+      Math.abs(Math.abs(t212Tx.amount) - t.amount) < MIRROR_TOLERANCE &&
+      Math.abs(new Date(t212Tx.dateTime).getTime() - new Date(t.dateTime).getTime()) < MIRROR_WINDOW_MS
+    )
+    if (bankMatch) {
+      toRemove.add(t212Tx.reference)
+      toRemove.add(bankMatch.reference)
+    }
+  }
+
   return txs.filter((t) => !toRemove.has(t.reference))
 }
-
 export function getDateRange(mode: 'month' | 'week', offset: number): { start: Date; end: Date } {
   const now = new Date()
   const start = new Date(now)
@@ -82,19 +96,27 @@ export function formatRangeLabel(mode: 'month' | 'week', start: Date, end: Date)
     : `${start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
 }
 
-export function calculateSpending(transactions: FinancialTransaction[], range: { start: Date; end: Date }): number {
+export function calculateSpending(
+  transactions: FinancialTransaction[], 
+  range: { start: Date; end: Date }
+): number {
   let total = 0
+  let reimbursements = 0
   
   for (const tx of transactions) {
+    const txDate = new Date(tx.dateTime)
+    if (txDate < range.start || txDate > range.end) continue
+    
     if (tx.amount < 0 && tx.type !== 'DEPOSIT') {
-      const txDate = new Date(tx.dateTime)
-      if (txDate >= range.start && txDate <= range.end) {
-        total += Math.abs(tx.amount)
-      }
+      total += Math.abs(tx.amount)
+    }
+    
+    if (tx.category === 'reimbursement') {
+      reimbursements += tx.amount
     }
   }
   
-  return total
+  return total - reimbursements
 }
 
 export function useActivityStats(transactions: ComputedRef<FinancialTransaction[]>) {
@@ -173,7 +195,7 @@ export type TransactionRow = FinancialTransaction & {
 }
 
 export function prepareTransactionRows(transactions: FinancialTransaction[]): TransactionRow[] {
-  return transactions.map((tx) => {
+  const rows = transactions.map((tx) => {
     const date = new Date(tx.dateTime)
     
     const dayKey = [
@@ -192,6 +214,34 @@ export function prepareTransactionRows(transactions: FinancialTransaction[]): Tr
     
     return { ...tx, uid, dayKey, dayLabel }
   })
+
+  const grouped: TransactionRow[] = []
+  const interestByDay = new Map<string, TransactionRow[]>()
+  
+  for (const row of rows) {
+    if (row.type === 'INTEREST/CASHBACK') {
+      const existing = interestByDay.get(row.dayKey) || []
+      existing.push(row)
+      interestByDay.set(row.dayKey, existing)
+    } else {
+      grouped.push(row)
+    }
+  }
+  
+  for (const [dayKey, interests] of interestByDay) {
+    const totalAmount = interests.reduce((sum, i) => sum + i.amount, 0)
+    const first = interests[0]
+    
+    //@ts-ignore
+    grouped.push({
+      ...first,
+      amount: totalAmount,
+      uid: `${dayKey}-interest-grouped`,
+      description: `Interest (${interests.length} payments)`
+    })
+  }
+  
+  return grouped
 }
 
 export const transactionUtils = {
@@ -207,4 +257,28 @@ export const transactionUtils = {
     }
     return colors[type] || 'neutral'
   }
+}
+
+export function calculateIncome(
+  transactions: FinancialTransaction[], 
+  range: { start: Date; end: Date }
+): number {
+  let total = 0
+  
+  for (const tx of transactions) {
+    const txDate = new Date(tx.dateTime)
+    if (txDate < range.start || txDate > range.end) continue
+    if (tx.amount <= 0) continue
+    
+    if (tx.source === 'bank-account') {
+      if (tx.category === 'reimbursement') continue
+
+      
+      total += tx.amount 
+    } else if (tx.type === 'INTEREST/CASHBACK') {
+      total += tx.amount 
+    }
+  }
+  
+  return total
 }

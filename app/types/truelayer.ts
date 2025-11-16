@@ -27,8 +27,8 @@ export type TruelayerTransaction = {
   timestamp: string
   description: string
   merchant?: string
-  category?: string
-  classification?: string[]
+  transaction_type?: string
+  transaction_category?: string
   amount: number
   currency: string
   runningBalance: number | null

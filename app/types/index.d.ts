@@ -23,6 +23,8 @@ export interface FinancialTransaction {
   reference: string
   dateTime: string
   source: string
+  category: string
+  description: string
 }
 
 export interface CombinedFinancialData {

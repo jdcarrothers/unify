@@ -12,8 +12,6 @@ export function useTruelayerApi() {
   }
 
   async function withAuthFetch<T = any>(path: string): Promise<T> {
-
-    console.log('withAuthFetch', path)
     const token = await getValidToken()
     if (!token) throw new Error('Not authenticated')
     const headers = { Authorization: `Bearer ${token}` }
@@ -27,8 +25,8 @@ export function useTruelayerApi() {
       timestamp: tx.timestamp,
       description: tx.description,
       merchant: tx.merchant_name,
-      category: tx.transaction_category,
-      classification: tx.transaction_classification,
+      transaction_type: tx.transaction_type,
+      transaction_category: tx.transaction_category,
       amount,
       currency: tx.currency,
       runningBalance: tx.running_balance?.amount ?? null,

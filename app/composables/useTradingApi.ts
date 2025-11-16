@@ -7,7 +7,13 @@ import { useCache } from '~/composables/useCache'
 import { USER_CONFIG_FILE } from '~/const'
 
 type ExportItem = { reportId: number; timeFrom: string; timeTo: string; status: string; downloadLink?: string }
-type CsvRow = { Action: string; Time: string; ID: string; Total?: string }
+type CsvRow = { 
+  Action: string
+  Time: string
+  ID: string
+  Total?: string
+  'Merchant name'?: string  
+}
 
 export function useTradingApi() {
   async function authHeader() {
@@ -62,10 +68,12 @@ export function useTradingApi() {
       const action = row.Action?.toString()
       const id = row.ID?.toString()
       const time = row.Time?.toString()
+      const description = row['Merchant name']?.toString() || ''
+
       if (!action || !id || !time) return []
       const type = normaliseType(action)
       const amount = row.Total ? parseFloat(row.Total.replace(/,/g, '')) : 0
-      return [{ type, amount, reference: id, dateTime: new Date(time).toISOString() }]
+      return [{ type, amount, reference: id, dateTime: new Date(time).toISOString(), description }]
     })
   }
 
