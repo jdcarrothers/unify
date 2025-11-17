@@ -25,10 +25,7 @@ export function useDemoMode() {
   const isDemoMode = readonly(globalDemoMode)
   
   const toggleDemoMode = () => {
-    const newValue = !globalDemoMode.value
-    console.log('Toggling demo mode:', globalDemoMode.value, '->', newValue)
-    saveDemoMode(newValue)
-    console.log('Demo mode after toggle:', globalDemoMode.value)
+    saveDemoMode(!globalDemoMode.value)
   }
   
   const setDemoMode = (enabled: boolean) => {

@@ -60,15 +60,15 @@ function removeKeyword(keyword: string) {
   formState.value.keywords = formState.value.keywords.filter(k => k !== keyword)
 }
 
-function saveRule(close: () => void) {
+async function saveRule(close: () => void) {
   if (!formState.value.name || formState.value.keywords.length === 0) {
     return
   }
 
   if (props.rule) {
-    updateRule(props.rule.id, formState.value)
+    await updateRule(props.rule.id, formState.value)
   } else {
-    createRule(formState.value)
+    await createRule(formState.value)
   }
 
   close()

@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import TradingConnect from '~/components/connections/TradingConnect.vue'
 import TruelayerConnect from '~/components/connections/TruelayerConnect.vue'
-import SyncBanner from '~/components/connections/SyncBanner.vue'
 import { useDemoMode } from '~/composables/useDemoMode'
 import { useConnections } from '~/composables/useConnections'
 import { useConnectionStatus, type ConnectionConfig } from '~/utils/shared'
@@ -21,28 +20,17 @@ const loading = ref(false)
 async function refreshStatus() {
   loading.value = true
   try {
-    if (isDemoMode.value) {
-      console.log('Demo mode: Using mock connection status')
-      status.value = demoStatus
-    } else {
-      const apiStatus = await getStatus()
-      status.value = {
-        ...apiStatus,
-        demo: {
-          active: false
-        }
-      }
-    }
+    // Use demo data if in demo mode, otherwise fetch from API
+    status.value = isDemoMode.value 
+      ? demoStatus 
+      : { ...await getStatus(), demo: { active: false } }
   } finally {
     loading.value = false
   }
 }
 
 onMounted(refreshStatus)
-
-watch(isDemoMode, () => {
-  refreshStatus()
-})
+watch(isDemoMode, refreshStatus)
 
 function handleTradingConnected() {
   refreshStatus()
@@ -81,7 +69,7 @@ const connectionConfigs: ConnectionConfig[] = [
     icon: 'i-lucide-plug',
     description: 'Connect your debit & credit accounts via TrueLayer to import transactions.',
     statusPath: ['truelayer', 'connected'],
-    hasDataPath: ['truelayer', 'connectedAccounts'], // Also check connectedCards in logic
+    hasDataPath: ['truelayer', 'connectedAccounts'], 
     buttonLabel: {
       disconnected: 'Connect',
       connected: 'Initialise',
@@ -93,7 +81,7 @@ const connectionConfigs: ConnectionConfig[] = [
     title: 'Demo Mode',
     icon: 'i-heroicons-beaker',
     description: 'Switch between live financial data and mock demo data for testing.',
-    statusPath: ['demo', 'active'], // We'll add this to mock status
+    statusPath: ['demo', 'active'], 
     buttonLabel: {
       disconnected: 'Start Demo',
       connected: 'Stop Demo'
@@ -121,24 +109,12 @@ const connectionStatuses = computed(() => {
   return statuses
 })
 
-const t212Status = computed(() => connectionStatuses.value.find(s => s.id === 'trading212'))
-const tlStatus = computed(() => connectionStatuses.value.find(s => s.id === 'truelayer'))
-
 </script>
 
 <template>
   <UDashboardPanel id="connections">
-    <template #header>
-      <UDashboardNavbar title="Connections">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-      </UDashboardNavbar>
-    </template>
 
     <template #body>
-      <SyncBanner />
-
       <UPageGrid class="lg:grid-cols-3 gap-4 sm:gap-6">
         <UPageCard 
           v-for="connection in connectionStatuses" 

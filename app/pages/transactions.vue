@@ -10,11 +10,10 @@ import {
   transactionUtils,
   type TransactionRow,
 } from "~/composables/useActivityStats";
-import { useFinancialDataWithStream } from "~/composables/useFinancialData";
-import SyncBanner from "~/components/connections/SyncBanner.vue";
+import { useDataProvider } from "~/composables/useDataProvider";
 
 const { data, status, refresh, streamUpdate, isDemoMode } =
-  useFinancialDataWithStream();
+  useDataProvider();
 
 watch(streamUpdate, (evt) => {
   if (evt?.source === "trading212") refresh();
@@ -121,24 +120,8 @@ function formatSource(source: string): string {
 </script>
 
 <template>
-  <UDashboardPanel id="activity-grouped">
-    <template #header>
-      <UDashboardNavbar title="Transaction Activity">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-
-        <template #trailing>
-          <UBadge v-if="isDemoMode" color="info" variant="subtle">
-            Demo Mode
-          </UBadge>
-        </template>
-      </UDashboardNavbar>
-    </template>
-
+  <UDashboardPanel id="transactions">
     <template #body>
-      <SyncBanner sync-only />
-
       <UPageGrid class="lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-px items-center">
         <UPageCard
           v-for="stat in stats"

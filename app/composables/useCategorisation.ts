@@ -1,103 +1,144 @@
 import type { CategoryRule, CategoryMatch, CategoryStats, TransactionCategoryMap } from '~/types/categorization'
 import type { FinancialTransaction } from '~/types'
-
-const RULES_STORAGE_KEY = 'unify-category-rules'
-const OVERRIDES_STORAGE_KEY = 'unify-transaction-category-overrides'
+import { useDemoMode } from '~/composables/useDemoMode'
 
 export function useCategorisation() {
-  function getRules(): CategoryRule[] {
-    if (typeof window === 'undefined') return []
-    const stored = localStorage.getItem(RULES_STORAGE_KEY)
-    if (!stored) return []
+  const { isDemoMode } = useDemoMode()
+  
+  // Fetch rules from server (demo or live)
+  async function getRules(): Promise<CategoryRule[]> {
     try {
-      return JSON.parse(stored) as CategoryRule[]
-    } catch {
+      const endpoint = isDemoMode.value 
+        ? '/api/categories/demo/rules' 
+        : '/api/categories/rules'
+      const data = await $fetch<CategoryRule[]>(endpoint)
+      return data
+    } catch (error) {
+      console.error('Failed to fetch category rules:', error)
       return []
     }
   }
 
-  function saveRules(rules: CategoryRule[]) {
-    if (typeof window === 'undefined') return
-    localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(rules))
-  }
-
-  function createRule(rule: Omit<CategoryRule, 'id' | 'createdAt' | 'updatedAt'>): CategoryRule {
-    const newRule: CategoryRule = {
-      ...rule,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+  async function saveRules(rules: CategoryRule[]) {
+    if (isDemoMode.value) {
+      console.warn('Cannot save rules in demo mode')
+      return
     }
-    const rules = getRules()
-    rules.push(newRule)
-    saveRules(rules)
-    return newRule
+    // This is handled by individual create/update/delete operations
   }
 
-  function updateRule(id: string, updates: Partial<Omit<CategoryRule, 'id' | 'createdAt'>>): CategoryRule | null {
-    const rules = getRules()
-    const index = rules.findIndex(r => r.id === id)
-    if (index === -1) return null
-    
-    const existing = rules[index]
-    if (!existing) return null
-    
-    const updated: CategoryRule = {
-      id: existing.id,
-      name: updates.name ?? existing.name,
-      keywords: updates.keywords ?? existing.keywords,
-      color: updates.color ?? existing.color,
-      icon: updates.icon ?? existing.icon,
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString()
+  async function createRule(rule: Omit<CategoryRule, 'id' | 'createdAt' | 'updatedAt'>): Promise<CategoryRule | null> {
+    if (isDemoMode.value) {
+      console.warn('Cannot create rules in demo mode')
+      return null
     }
-    rules[index] = updated
-    saveRules(rules)
-    return updated
-  }
-
-  function deleteRule(id: string): boolean {
-    const rules = getRules()
-    const filtered = rules.filter(r => r.id !== id)
-    if (filtered.length === rules.length) return false
-    saveRules(filtered)
-    return true
-  }
-
-  function getOverrides(): TransactionCategoryMap {
-    if (typeof window === 'undefined') return {}
-    const stored = localStorage.getItem(OVERRIDES_STORAGE_KEY)
-    if (!stored) return {}
+    
     try {
-      return JSON.parse(stored) as TransactionCategoryMap
-    } catch {
+      const newRule = await $fetch<CategoryRule>('/api/categories/rules', {
+        method: 'POST',
+        body: rule
+      })
+      return newRule
+    } catch (error) {
+      console.error('Failed to create rule:', error)
+      return null
+    }
+  }
+
+  async function updateRule(id: string, updates: Partial<Omit<CategoryRule, 'id' | 'createdAt'>>): Promise<CategoryRule | null> {
+    if (isDemoMode.value) {
+      console.warn('Cannot update rules in demo mode')
+      return null
+    }
+    
+    try {
+      const updated = await $fetch<CategoryRule>(`/api/categories/rules/${id}`, {
+        method: 'PUT',
+        body: updates
+      })
+      return updated
+    } catch (error) {
+      console.error('Failed to update rule:', error)
+      return null
+    }
+  }
+
+  async function deleteRule(id: string): Promise<boolean> {
+    if (isDemoMode.value) {
+      console.warn('Cannot delete rules in demo mode')
+      return false
+    }
+    
+    try {
+      await $fetch(`/api/categories/rules/${id}`, {
+        method: 'DELETE'
+      })
+      return true
+    } catch (error) {
+      console.error('Failed to delete rule:', error)
+      return false
+    }
+  }
+
+  async function getOverrides(): Promise<TransactionCategoryMap> {
+    try {
+      const endpoint = isDemoMode.value 
+        ? '/api/categories/demo/overrides' 
+        : '/api/categories/overrides'
+      const data = await $fetch<TransactionCategoryMap>(endpoint)
+      return data
+    } catch (error) {
+      console.error('Failed to fetch overrides:', error)
       return {}
     }
   }
 
-  function saveOverrides(overrides: TransactionCategoryMap) {
-    if (typeof window === 'undefined') return
-    localStorage.setItem(OVERRIDES_STORAGE_KEY, JSON.stringify(overrides))
+  async function saveOverrides(overrides: TransactionCategoryMap) {
+    if (isDemoMode.value) {
+      console.warn('Cannot save overrides in demo mode')
+      return
+    }
+    // This is handled by individual set/remove operations
   }
 
-  function setTransactionCategory(transactionRef: string, categoryName: string) {
-    const overrides = getOverrides()
-    overrides[transactionRef] = categoryName
-    saveOverrides(overrides)
+  async function setTransactionCategory(transactionRef: string, categoryName: string): Promise<void> {
+    if (isDemoMode.value) {
+      console.warn('Cannot set transaction categories in demo mode')
+      return
+    }
+    
+    try {
+      await $fetch('/api/categories/overrides', {
+        method: 'POST',
+        body: { transactionRef, categoryName }
+      })
+    } catch (error) {
+      console.error('Failed to set transaction category:', error)
+    }
   }
 
-  function removeTransactionOverride(transactionRef: string) {
-    const overrides = getOverrides()
-    delete overrides[transactionRef]
-    saveOverrides(overrides)
+  async function removeTransactionOverride(transactionRef: string): Promise<void> {
+    if (isDemoMode.value) {
+      console.warn('Cannot remove transaction overrides in demo mode')
+      return
+    }
+    
+    try {
+      await $fetch(`/api/categories/overrides/${transactionRef}`, {
+        method: 'DELETE'
+      })
+    } catch (error) {
+      console.error('Failed to remove transaction override:', error)
+    }
   }
 
-  function matchTransaction(description: string, transactionRef?: string): CategoryMatch {
+  async function matchTransaction(description: string, transactionRef?: string): Promise<CategoryMatch> {
+    const overrides = await getOverrides()
+    
     if (transactionRef) {
-      const overrides = getOverrides()
       const overrideCategory = overrides[transactionRef]
       if (overrideCategory) {
-        const rules = getRules()
+        const rules = await getRules()
         const rule = rules.find(r => r.name === overrideCategory)
         return {
           category: overrideCategory,
@@ -107,7 +148,7 @@ export function useCategorisation() {
       }
     }
 
-    const rules = getRules()
+    const rules = await getRules()
     const lowerDesc = description.toLowerCase().trim()
     
     for (const rule of rules) {
@@ -130,21 +171,42 @@ export function useCategorisation() {
     }
   }
 
-  function categorizeTransaction(transaction: FinancialTransaction): FinancialTransaction {
-    const match = matchTransaction(transaction.description, transaction.reference)
+  async function categorizeTransaction(transaction: FinancialTransaction): Promise<FinancialTransaction> {
+    const match = await matchTransaction(transaction.description, transaction.reference)
     return {
       ...transaction,
       category: match.category
     }
   }
 
-  function categorizeTransactions(transactions: FinancialTransaction[]): FinancialTransaction[] {
-    return transactions.map(categorizeTransaction)
+  async function categorizeTransactions(transactions: FinancialTransaction[]): Promise<FinancialTransaction[]> {
+    // Batch fetch rules and overrides once
+    const [rules, overrides] = await Promise.all([getRules(), getOverrides()])
+    
+    return transactions.map(transaction => {
+      // Check override first
+      const overrideCategory = transaction.reference ? overrides[transaction.reference] : undefined
+      
+      if (overrideCategory) {
+        return { ...transaction, category: overrideCategory }
+      }
+      
+      // Match by keywords
+      const lowerDesc = transaction.description.toLowerCase().trim()
+      const matchedRule = rules.find(rule =>
+        rule.keywords.some(keyword => lowerDesc.includes(keyword.toLowerCase().trim()))
+      )
+      
+      return {
+        ...transaction,
+        category: matchedRule?.name || 'Uncategorized'
+      }
+    })
   }
 
-  function calculateCategoryStats(transactions: FinancialTransaction[]): CategoryStats[] {
-    const rules = getRules()
-    const categorized = categorizeTransactions(transactions)
+  async function calculateCategoryStats(transactions: FinancialTransaction[]): Promise<CategoryStats[]> {
+    const rules = await getRules()
+    const categorized = await categorizeTransactions(transactions)
     
     const categoryMap = new Map<string, FinancialTransaction[]>()
     

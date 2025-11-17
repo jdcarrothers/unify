@@ -3,12 +3,10 @@ import type { MonthlyIncome } from '~/composables/useIncomeStats'
 import MonthCard from '~/components/income/MonthCard.vue'
 import BreakdownModal from '~/components/income/BreakdownModal.vue'
 
-const { data } = useFinancialDataWithStream()
+const { data } = useDataProvider()
 
-// Use composable for income calculations
 const { monthlyIncomes, getBreakdown } = useIncomeStats(data)
 
-// Modal state
 const selectedMonth = ref<MonthlyIncome | null>(null)
 const showModal = ref(false)
 
@@ -24,14 +22,6 @@ const breakdown = computed(() =>
 
 <template>
   <UDashboardPanel>
-    <template #header>
-      <UDashboardNavbar title="Income">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-      </UDashboardNavbar>
-    </template>
-
     <template #body>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <MonthCard

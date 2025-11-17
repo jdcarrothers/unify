@@ -2,8 +2,9 @@
 import type { FinancialTransaction } from '~/types'
 import CategoryCard from '~/components/categories/CategoryCard.vue'
 import TransactionRow from '~/components/categories/TransactionRow.vue'
+import { useDataProvider } from '~/composables/useDataProvider'
 
-const { data: financeData, pending } = useFinancialDataWithStream()
+const { data: financeData, pending } = useDataProvider()
 const { getRules, setTransactionCategory, getOverrides } = useCategorisation()
 
 const {
@@ -15,13 +16,22 @@ const {
   reimbursements
 } = useCategoryStats(financeData)
 
-const categories = computed(() => {
-  const rules = getRules()
-  return [
+const categoryRules = ref<string[]>([])
+const overrides = ref<Record<string, string>>({})
+
+async function loadCategories() {
+  const rules = await getRules()
+  categoryRules.value = [
     'Uncategorized',
     ...rules.map(r => r.name)
   ]
-})
+}
+
+async function loadOverrides() {
+  overrides.value = await getOverrides()
+}
+
+const categories = computed(() => categoryRules.value)
 
 const refreshKey = ref(0)
 const selectedCategory = ref<string | null>(null)
@@ -41,28 +51,28 @@ function openReimbursements() {
   showReimbursementsModal.value = true
 }
 
-function updateCategory(transaction: FinancialTransaction, newCategory: string) {
-  setTransactionCategory(transaction.reference, newCategory)
+async function updateCategory(transaction: FinancialTransaction, newCategory: string) {
+  await setTransactionCategory(transaction.reference, newCategory)
   transaction.category = newCategory
+  await loadOverrides()
   refreshKey.value++
 }
 
 function hasOverride(ref: string): boolean {
-  refreshKey.value 
-  const overrides = getOverrides()
-  return ref in overrides
+  refreshKey.value // Trigger reactivity
+  return ref in overrides.value
 }
+
+onMounted(() => {
+  loadCategories()
+  loadOverrides()
+})
 
 </script>
 
 <template>
   <UDashboardPanel id="categories">
     <template #header>
-      <UDashboardNavbar title="Spending by Category">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-      </UDashboardNavbar>
 
       <UDashboardToolbar>
         <template #left>

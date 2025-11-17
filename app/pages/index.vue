@@ -2,10 +2,9 @@
 import type { Period, Range } from '~/types'
 import { subYears } from 'date-fns'
 import type {  FinancialTransaction } from '~/types'
-import { useFinancialDataWithStream } from '~/composables/useFinancialData'
-import SyncBanner from '~/components/connections/SyncBanner.vue'
+import { useDataProvider } from '~/composables/useDataProvider'
 
-const { data: financeData, status, refresh, streamUpdate, isDemoMode } = useFinancialDataWithStream()
+const { data: financeData, status, refresh, streamUpdate, isDemoMode } = useDataProvider()
 
 watch(streamUpdate, (evt) => {
   if (evt?.source === 'trading212') {
@@ -38,18 +37,6 @@ const period = ref<Period>('weekly')
 <template>
   <UDashboardPanel id="home">
     <template #header>
-      <UDashboardNavbar title="Home" :ui="{ right: 'gap-3' }">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-
-        <template #trailing>
-          <UBadge v-if="isDemoMode" color="info" variant="subtle">
-            Demo Mode
-          </UBadge>
-        </template>
-      </UDashboardNavbar>
-
       <UDashboardToolbar>
         <template #left>
           <HomeDateRangePicker v-model="range" class="-ms-1" />
@@ -59,7 +46,6 @@ const period = ref<Period>('weekly')
     </template>
 
     <template #body>
-      <SyncBanner sync-only />
       <div class="space-y-6">
         <HomeStats :period="period" :range="range" :data="financeData!" />
         <HomeChart :period="period" :range="range" :data="financeData!" />

@@ -2,6 +2,10 @@ import { useFinanceStream } from '~/composables/useFinanceStream'
 import { useDemoMode } from '~/composables/useDemoMode'
 import type { CombinedFinancialData } from '~/types'
 
+/**
+ * @deprecated Use useDataProvider() instead for cleaner abstraction
+ * This composable is kept for backward compatibility but will be removed in future versions
+ */
 export function useFinancialData() {
   const { isDemoMode, toggleDemoMode: toggleDemo, setDemoMode } = useDemoMode()
   
@@ -48,6 +52,10 @@ export function useFinancialData() {
   }
 }
 
+/**
+ * @deprecated Use useDataProvider() instead for cleaner abstraction
+ * This composable is kept for backward compatibility but will be removed in future versions
+ */
 export function useFinancialDataWithStream() {
   const { isDemoMode } = useDemoMode()
   

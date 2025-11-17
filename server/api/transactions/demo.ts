@@ -125,7 +125,9 @@ export default defineEventHandler(async () => {
         amount,
         reference: `${reference}_${generateUUID()}`,
         dateTime: date.toISOString(),
-        source
+        source,
+        category: 'Uncategorized', // Will be categorized by the categorization system
+        description: reference // Use reference as description
       })
     }
   }

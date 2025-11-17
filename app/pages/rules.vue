@@ -7,9 +7,15 @@ const { getRules, deleteRule } = useCategorisation()
 const rules = ref<CategoryRule[]>([])
 const showFormModal = ref(false)
 const editingRule = ref<CategoryRule | null>(null)
+const loading = ref(false)
 
-function loadRules() {
-  rules.value = getRules()
+async function loadRules() {
+  loading.value = true
+  try {
+    rules.value = await getRules()
+  } finally {
+    loading.value = false
+  }
 }
 
 function openCreateForm() {
@@ -22,14 +28,14 @@ function openEditForm(rule: CategoryRule) {
   showFormModal.value = true
 }
 
-function handleSaved() {
-  loadRules()
+async function handleSaved() {
+  await loadRules()
 }
 
-function handleDelete(id: string) {
+async function handleDelete(id: string) {
   if (confirm('Delete this category rule?')) {
-    deleteRule(id)
-    loadRules()
+    await deleteRule(id)
+    await loadRules()
   }
 }
 
@@ -40,13 +46,6 @@ onMounted(() => {
 
 <template>
   <UDashboardPanel id="rules">
-    <template #header>
-      <UDashboardNavbar title="Category Rules">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-      </UDashboardNavbar>
-    </template>
 
     <template #body>
       <UEmpty
